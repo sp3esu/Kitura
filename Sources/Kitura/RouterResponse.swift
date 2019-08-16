@@ -19,7 +19,11 @@ import KituraTemplateEngine
 import LoggerAPI
 import Foundation
 import KituraContracts
-
+#if swift(>=4.1)
+  #if canImport(FoundationNetworking)
+    import FoundationNetworking
+  #endif
+#endif
 
 // MARK: RouterResponse
 
@@ -104,9 +108,9 @@ public class RouterResponse {
     private var lifecycle = Lifecycle()
 
     private let encoders: [MediaType: () -> BodyEncoder]
-    
+
     private let defaultResponseMediaType: MediaType
-    
+
     // regex used to sanitize javascript identifiers
     fileprivate static let sanitizeJSIdentifierRegex: NSRegularExpression! = {
         do {
@@ -140,7 +144,7 @@ public class RouterResponse {
     /// User info.
     /// Can be used by middlewares and handlers to store and pass information on to subsequent handlers.
     public var userInfo: [String: Any] = [:]
-    
+
     /// Initialize a `RouterResponse` instance
     ///
     /// - Parameter response: The `ServerResponse` object to work with
@@ -175,8 +179,67 @@ public class RouterResponse {
         }
     }
 
-    // MARK: End
+    /// Add a cookie to the response.
+    ///
+    /// This function creates an `HTTPCookie`  from the provided attributes and adds it to the `cookies` dictionary.
+    /// - Parameter name: The cookie’s name.
+    /// - Parameter value: The cookie‘s value.
+    /// - Parameter domain: The domain of the cookie.
+    /// - Parameter path: The cookie’s path.
+    /// - Parameter otherAttributes: An array of  any other optional cookie attributes
+    public func addCookie(name: String, value: String, domain: String, path: String, otherAttributes: [AdditionalCookieAttribute]? = nil ) {
+        var cookieProperties = [HTTPCookiePropertyKey: Any]()
+        cookieProperties[HTTPCookiePropertyKey.name] = name
+        cookieProperties[HTTPCookiePropertyKey.value] = value
+        cookieProperties[HTTPCookiePropertyKey.domain] = domain
+        cookieProperties[HTTPCookiePropertyKey.path] = path
+        if let otherAttributes = otherAttributes, otherAttributes.isEmpty == false {
+            for attribute in otherAttributes {
+                switch attribute._value {
+                case .portList(let ports):
+                    if let ports = ports {
+                        cookieProperties[HTTPCookiePropertyKey.port] = ports
+                    }
+
+                case .expires(let expiresDate):
+                    if let expiresDate = expiresDate {
+                        cookieProperties[HTTPCookiePropertyKey.expires] = expiresDate
+                    }
+
+                case .maximumAge(let maxAge):
+                    cookieProperties[HTTPCookiePropertyKey.maximumAge] = maxAge
+
+                case .originURL(let originURL):
+                    cookieProperties[HTTPCookiePropertyKey.originURL] = originURL
+
+                case .version(let cookieVersion):
+                    cookieProperties[HTTPCookiePropertyKey.version] = cookieVersion
+
+                case .discard(let discard):
+                    cookieProperties[HTTPCookiePropertyKey.discard] = discard
+
+                case .isSecure(let secure):
+                    cookieProperties[HTTPCookiePropertyKey.secure] = secure ? "YES" : "NO"
+
+                case .comment(let comment):
+                    if let comment = comment {
+                        cookieProperties[HTTPCookiePropertyKey.comment] = comment
+                    }
+
+                case .commentURL(let commentURL):
+                    if let commentURL = commentURL {
+                        cookieProperties[HTTPCookiePropertyKey.commentURL] = commentURL
+                    }
+                }
+            }
+            if let cookie = HTTPCookie(properties: cookieProperties) {
+                cookies[cookie.name] = cookie
+            }
+        }
+    }
     
+    // MARK: End
+
     /// End the response.
     ///
     /// - Throws: Socket.Error if an error occurred while writing to a socket.
@@ -282,7 +345,7 @@ public class RouterResponse {
     }
 
     // MARK: Redirect
-    
+
     /// Redirect to path with status code.
     ///
     /// - Parameter: The path for the redirect.
@@ -297,7 +360,7 @@ public class RouterResponse {
     }
 
     // MARK: Render
-    
+
     // influenced by http://expressjs.com/en/4x/api.html#app.render
     /// Render a resource using Router's template engine.
     ///
@@ -307,7 +370,7 @@ public class RouterResponse {
     /// - Throws: TemplatingError if no file extension was specified or there is no template engine defined for the extension.
     /// - Returns: This RouterResponse.
     @discardableResult
-    public func render(_ resource: String, context: [String:Any],
+    public func render(_ resource: String, context: [String: Any],
                        options: RenderingOptions = NullRenderingOptions()) throws -> RouterResponse {
         guard let router = getRouterThatCanRender(resource: resource) else {
             throw TemplatingError.noTemplateEngineForExtension(extension: "")
@@ -315,7 +378,7 @@ public class RouterResponse {
         let renderedResource = try router.render(template: resource, context: context, options: options)
         return send(renderedResource)
     }
-    
+
     /// Render a resource using Router's template engine.
     ///
     /// - Parameter resource: The resource name without extension.
@@ -328,15 +391,15 @@ public class RouterResponse {
     @discardableResult
     public func render<T: Encodable>(_ resource: String, with value: T, forKey key: String? = nil,
                        options: RenderingOptions = NullRenderingOptions()) throws -> RouterResponse {
-        
+
         guard let router = getRouterThatCanRender(resource: resource) else {
             throw TemplatingError.noTemplateEngineForExtension(extension: "")
         }
-        
+
         let renderedResource = try router.render(template: resource, with: value, forKey: key, options: options)
         return send(renderedResource)
     }
-    
+
     /// Render a resource using Router's template engine.
     ///
     /// - Parameter resource: The resource name without extension.
@@ -353,7 +416,7 @@ public class RouterResponse {
             throw TemplatingError.noTemplateEngineForExtension(extension: "")
         }
         let items: [T] = values.map { $0.1 }
-        
+
         let renderedResource = try router.render(template: resource, with: items, forKey: key, options: options)
         return send(renderedResource)
     }
@@ -382,7 +445,7 @@ public class RouterResponse {
     func popRouter() {
         let _ = routerStack.pop()
     }
-    
+
     // MARK: Set Properties
 
     /// Set the pre-flush lifecycle handler and return the previous one.
@@ -406,7 +469,7 @@ public class RouterResponse {
     }
 
     // MARK: Content Negotiation
-    
+
     /// Perform content-negotiation on the Accept HTTP header on the request, when present.
     ///
     /// Uses request.accepts() to select a handler for the request, based on the acceptable types ordered by their
@@ -416,7 +479,7 @@ public class RouterResponse {
     ///
     /// - Parameter callbacks: A dictionary that maps content types to handlers.
     /// - Throws: Socket.Error if an error occurred while writing to a socket.
-    public func format(callbacks: [String : ((RouterRequest, RouterResponse) -> Void)]) throws {
+    public func format(callbacks: [String: ((RouterRequest, RouterResponse) -> Void)]) throws {
         let callbackTypes = Array(callbacks.keys)
         if let acceptType = request.accepts(types: callbackTypes) {
             headers["Content-Type"] = acceptType
@@ -427,9 +490,9 @@ public class RouterResponse {
             try status(.notAcceptable).end()
         }
     }
-    
+
     // MARK: Send String
-    
+
     /// Send a UTF-8 encoded string.
     ///
     /// - Parameter str: The string to send.
@@ -440,17 +503,16 @@ public class RouterResponse {
             Log.warning("RouterResponse send(str:) invoked after end() for \(self.request.urlURL)")
             return self
         }
-        let utf8Length = str.utf8.count
-        let bufferLength = utf8Length + 1  // Add room for the NULL terminator
-        var utf8: [CChar] = [CChar](repeating: 0, count: bufferLength)
-        if str.getCString(&utf8, maxLength: bufferLength, encoding: .utf8) {
-            let rawBytes = UnsafeRawPointer(UnsafePointer(utf8))
-            buffer.append(bytes: rawBytes.assumingMemoryBound(to: UInt8.self), length: utf8Length)
-            state.invokedSend = true
+        let count = str.utf8.count
+        str.withCString {
+            $0.withMemoryRebound(to: UInt8.self, capacity: count) {
+                buffer.append(bytes: $0, length: count)
+                state.invokedSend = true
+            }
         }
         return self
     }
-    
+
     /// Send an optional string.
     /// If the `String?` can be unwrapped it is sent as a String, otherwise the empty string ("") is sent.
     ///
@@ -468,7 +530,7 @@ public class RouterResponse {
         }
         return send(str)
     }
-    
+
     /// Set the HTTP status code of the RouterResponse and send the String description of the HTTP status code.
     ///
     /// - Parameter status: The HTTP status code.
@@ -482,9 +544,9 @@ public class RouterResponse {
         send(HTTPURLResponse.localizedString(forStatusCode: status.rawValue))
         return self
     }
-    
+
     // MARK: Send Data
-    
+
     /// Send data.
     ///
     /// - Parameter data: The data to send.
@@ -499,7 +561,7 @@ public class RouterResponse {
         state.invokedSend = true
         return self
     }
-    
+
     /// Send a file.
     ///
     /// - Parameter fileName: The name of the file to send.
@@ -520,9 +582,9 @@ public class RouterResponse {
         if  let contentType = contentType {
             headers["Content-Type"] = contentType
         }
-        
+
         send(data: data)
-        
+
         return self
     }
     
@@ -538,9 +600,9 @@ public class RouterResponse {
         try send(fileName: StaticFileServer.ResourcePathHandler.getAbsolutePath(for: download))
         headers.addAttachment(for: download)
     }
-    
+
     typealias JSONSerializationType = JSONSerialization
-    
+
     /// Sets the Content-Type header as application/json, Serializes an array into JSON data and sends the data.
     /// If the data is not a valid JSON structure, it will not be sent and a warning will be logged.
     ///
@@ -552,7 +614,7 @@ public class RouterResponse {
             Log.warning("RouterResponse send(json:) invoked after end() for \(self.request.urlURL)")
             return self
         }
-        
+
         do {
             let jsonData = try JSONSerializationType.data(withJSONObject: json, options:.prettyPrinted)
             headers.setType("json")
@@ -560,10 +622,10 @@ public class RouterResponse {
         } catch {
             Log.warning("Failed to convert JSON for sending: \(error.localizedDescription)")
         }
-        
+
         return self
     }
-    
+
     /// Sets the Content-Type header as "application/json",
     /// Serializes a dictionary into JSON data and sends the data.
     /// If the data is not a valid JSON structure, it will not be sent and a warning will be logged.
@@ -576,7 +638,7 @@ public class RouterResponse {
             Log.warning("RouterResponse send(json:) invoked after end() for \(self.request.urlURL)")
             return self
         }
-        
+
         do {
             let jsonData = try JSONSerializationType.data(withJSONObject: json, options:.prettyPrinted)
             headers.setType("json")
@@ -584,7 +646,7 @@ public class RouterResponse {
         } catch {
             Log.warning("Failed to convert JSON for sending: \(error.localizedDescription)")
         }
-        
+
         return self
     }
 
@@ -593,9 +655,9 @@ public class RouterResponse {
 extension RouterResponse {
 
     // MARK: Send Encodable
-    
+
     /// Sends an Encodable type, encoded using the preferred `BodyEncoder` based on the "Accept" header sent in the request, and sets the Content-Type header appropriately.
-    
+
     /// If no Accept header was provided, or if no suitable encoder is registered with the router, the encoder corresponding to the `defaultResponseMediaType` will be used.
     ///
     /// - Parameter obj: The Codable object to send.

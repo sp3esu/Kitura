@@ -16,6 +16,11 @@
 
 import XCTest
 import Foundation
+#if swift(>=4.1)
+  #if canImport(FoundationNetworking)
+    import FoundationNetworking
+  #endif
+#endif
 
 @testable import Kitura
 @testable import KituraNet
@@ -27,11 +32,14 @@ let cookie2Value = "Testing-Testing"
 let cookie2ExpireExpected = Date(timeIntervalSinceNow: 600.0)
 let cookie3Name = "KituraTest3"
 let cookie3Value = "A-testing-we-go"
+let cookie4Name = "KituraTest4"
+let cookie4Value = "A-testing-4"
+let cookie4ExpireDate = Date.distantFuture
 let cookieHost = "localhost"
 
 let responseBodySeparator = "RESPONSE-BODY-SEPARATOR"
 
-class TestCookies: KituraTest {
+final class TestCookies: KituraTest, KituraTestSuite {
 
     static var allTests: [(String, (TestCookies) -> () throws -> Void)] {
         return [
@@ -142,9 +150,37 @@ class TestCookies: KituraTest {
                 }
                 expectation.fulfill()
             })
-        })
-    }
-
+        }, { expectation in
+            self.performRequest("get", path: "/3/sendcookie", callback: { response in
+                XCTAssertEqual(response?.statusCode, HTTPStatusCode.OK,
+                    "/3/sendcookie route did not match single path request")
+                let (cookie, _) = self.cookieFrom(response:
+                    response, named: cookie4Name as String)
+                XCTAssertNotNil(cookie, "Cookie \(cookie4Name) wasn't found in the response.")
+                if let cookie = cookie {
+                    XCTAssertEqual(cookie.value, cookie4Value as String, "Value of Cookie \(cookie4Name) is not \(cookie4Value), was \(cookie.value)")
+                    XCTAssertEqual(cookie.path, "/", "Path of Cookie \(cookie4Name) is not (/), was \(cookie.path)")
+                    XCTAssertEqual(cookie.domain, cookieHost as String, "Domain of Cookie \(cookie4Name) is not \(cookieHost), was \(cookie.domain)")
+                }
+                expectation.fulfill()
+            })
+        }, { expectation in
+            self.performRequest("get", path: "/3/sendcookie", callback: { response in
+                XCTAssertEqual(response?.statusCode, HTTPStatusCode.OK,
+                               "/3/sendcookie route did not match single path request")
+                let (cookie, _) = self.cookieFrom(response:
+                    response, named: cookie4Name as String)
+                XCTAssertNotNil(cookie, "Cookie \(cookie4Name) wasn't found in the response.")
+                if let cookie = cookie {
+                    XCTAssertEqual(cookie.value, cookie4Value as String, "Value of Cookie \(cookie4Name) is not \(cookie4Value), was \(cookie.value)")
+                    XCTAssertEqual(cookie.path, "/", "Path of Cookie \(cookie4Name) is not (/), was \(cookie.path)")
+                    XCTAssertEqual(cookie.domain, cookieHost as String, "Domain of Cookie \(cookie4Name) is not \(cookieHost), was \(cookie.domain)")
+                    XCTAssertTrue(cookie.isSecure, "\(cookie4Name) wasn't marked as secure. It should have been marked so.")
+                }
+                expectation.fulfill()
+            })
+        }
+    )}
     func cookieFrom(response: ClientResponse?, named: String) -> (HTTPCookie?, String?) {
         guard let response = response else {
             return (nil, nil)
@@ -167,7 +203,7 @@ class TestCookies: KituraTest {
                         properties[HTTPCookiePropertyKey.value] =  cookieValue
 
                         for  part in parts[1..<parts.count] {
-                            var pieces = part.components(separatedBy: "=")
+                            let pieces = part.components(separatedBy: "=")
                             let piece = pieces[0].lowercased()
                             switch piece {
                             case "secure", "httponly":
@@ -251,6 +287,7 @@ class TestCookies: KituraTest {
         }
 
         router.get("/1/sendcookie") {request, response, next in
+            print("running handler")
             response.status(HTTPStatusCode.OK)
 
             let cookie1 = HTTPCookie(properties: [HTTPCookiePropertyKey.name: cookie1Name,
@@ -278,6 +315,12 @@ class TestCookies: KituraTest {
                                                  HTTPCookiePropertyKey.secure: "Yes"])
             response.cookies[cookie!.name] = cookie
 
+            next()
+        }
+
+        router.get("/3/sendcookie") {request, response, next in
+            response.status(HTTPStatusCode.OK)
+            response.addCookie(name: cookie4Name, value: cookie4Value, domain: cookieHost, path: "/", otherAttributes: [.isSecure(true)])
             next()
         }
 

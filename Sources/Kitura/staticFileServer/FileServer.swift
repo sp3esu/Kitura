@@ -41,6 +41,10 @@ extension StaticFileServer {
         /// Whether accepts range requests or not
         let acceptRanges: Bool
 
+        /// A default index to be served if the requested path is not found.
+        /// This is intended to be used by single page applications.
+        let defaultIndex: String?
+
         init(servingFilesPath: String, options: StaticFileServer.Options,
              responseHeadersSetter: ResponseHeadersSetter?) {
             self.possibleExtensions = options.possibleExtensions
@@ -49,6 +53,7 @@ extension StaticFileServer {
             self.acceptRanges = options.acceptRanges
             self.servingFilesPath = servingFilesPath
             self.responseHeadersSetter = responseHeadersSetter
+            self.defaultIndex = options.defaultIndex
         }
 
         func getFilePath(from request: RouterRequest) -> String? {
@@ -86,7 +91,7 @@ extension StaticFileServer {
             return filePath
         }
 
-        func serveFile(_ filePath: String, requestPath: String, response: RouterResponse) {
+        func serveFile(_ filePath: String, requestPath: String, queryString: String, response: RouterResponse) {
             let fileManager = FileManager()
             var isDirectory = ObjCBool(false)
 
@@ -96,27 +101,49 @@ extension StaticFileServer {
                 #else
                     let isDirectoryBool = isDirectory
                 #endif
-                serveExistingFile(filePath, requestPath: requestPath,
+                serveExistingFile(filePath, requestPath: requestPath, queryString: queryString,
                                   isDirectory: isDirectoryBool, response: response)
                 return
             }
 
-            tryToServeWithExtensions(filePath, response: response)
-        }
+            if tryToServeWithExtensions(filePath, response: response) {
+                return
+            }
 
-        private func tryToServeWithExtensions(_ filePath: String, response: RouterResponse) {
-            let filePathWithPossibleExtensions = possibleExtensions.map { filePath + "." + $0 }
-            for filePathWithExtension in filePathWithPossibleExtensions {
-                serveIfNonDirectoryFile(atPath: filePathWithExtension, response: response)
+            // We haven't been able to find the requested path. For single page applications,
+            // a default fallback index may be configured. Before we serve the default index
+            // we make sure that this is a not a direct file request. The best check we could
+            // run for that is if the requested file contains a '.'. This is inspired by:
+            // https://github.com/bripkens/connect-history-api-fallback
+            let isDirectFileAccess = filePath.split(separator: "/").last?.contains(".") ?? false
+            if isDirectFileAccess == false, let defaultIndex = self.defaultIndex {
+                serveDefaultIndex(defaultIndex: defaultIndex, response: response)
             }
         }
 
-        private func serveExistingFile(_ filePath: String, requestPath: String, isDirectory: Bool,
-                                       response: RouterResponse) {
+        fileprivate func serveDefaultIndex(defaultIndex: String, response: RouterResponse) {
+            do {
+                try response.send(fileName: servingFilesPath + defaultIndex)
+            } catch {
+                 response.error = Error.failedToRedirectRequest(path: servingFilesPath + "/", chainedError: error)
+            }
+        }
+
+        private func tryToServeWithExtensions(_ filePath: String, response: RouterResponse) -> Bool {
+            var served = false
+            let filePathWithPossibleExtensions = possibleExtensions.map { filePath + "." + $0 }
+            for filePathWithExtension in filePathWithPossibleExtensions {
+                served = served || serveIfNonDirectoryFile(atPath: filePathWithExtension, response: response)
+            }
+            return served
+        }
+
+        private func serveExistingFile(_ filePath: String, requestPath: String, queryString: String,
+                                       isDirectory: Bool, response: RouterResponse) {
             if isDirectory {
                 if redirect {
                     do {
-                        try response.redirect(requestPath + "/")
+                        try response.redirect(requestPath + "/" + queryString)
                     } catch {
                         response.error = Error.failedToRedirectRequest(path: requestPath + "/", chainedError: error)
                     }
@@ -236,11 +263,11 @@ extension StaticFileServer {
                     partHeader += "Content-Range: bytes \(range.lowerBound)-\(range.upperBound)/\(fileSize)\r\n"
                     partHeader += (contentType == nil ? "" : "Content-Type: \(contentType!)\r\n")
                     partHeader += "\r\n"
-                    data.append(partHeader.data(using: .utf8)!)
+                    data.append(Data(partHeader.utf8))
                     data.append(fileData)
-                    data.append("\r\n".data(using: .utf8)!)
+                    data.append(Data("\r\n".utf8))
                 }
-                data.append("--\(boundary)--".data(using: .utf8)!)
+                data.append(Data("--\(boundary)--".utf8))
                 response.send(data: data)
                 response.statusCode = .partialContent
             }

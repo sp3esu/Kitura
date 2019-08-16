@@ -15,6 +15,7 @@
  */
 
 import Foundation
+import LoggerAPI
 
 // MARK: StaticFileServer
 
@@ -64,6 +65,7 @@ open class StaticFileServer: RouterMiddleware {
         let serveIndexForDirectory: Bool
         let cacheOptions: CacheOptions
         let acceptRanges: Bool
+        let defaultIndex: String?
 
         /// Initialize an Options instance.
         ///
@@ -76,13 +78,24 @@ open class StaticFileServer: RouterMiddleware {
         /// - Parameter redirect: an indication whether to redirect to trailing
         /// "/" when the requested path is a directory.
         /// - Parameter cacheOptions: cache options for StaticFileServer.
+        /// - Parameter defaultIndex: A default index, like "/index.html", to be served if the
+        /// requested path is not found. This is intended to be used by single page applications
+        /// that wish to fallback to a default index when a requested path is not found, and where
+        /// that path is not a file request. It will be assumed that the default index is reachable
+        /// from the root directory configured with the StaticFileServer. Here's a usage example:
+        /// ```swift
+        /// let router = Router()
+        /// router.all("/", middleware: StaticFileServer(defaultIndex: "/index.html"))
+        /// ```
         public init(possibleExtensions: [String] = [], serveIndexForDirectory: Bool = true,
-             redirect: Bool = true, cacheOptions: CacheOptions = CacheOptions(), acceptRanges: Bool = true) {
+             redirect: Bool = true, cacheOptions: CacheOptions = CacheOptions(), acceptRanges: Bool = true,
+             defaultIndex: String? = nil) {
             self.possibleExtensions = possibleExtensions
             self.serveIndexForDirectory = serveIndexForDirectory
             self.redirect = redirect
             self.cacheOptions = cacheOptions
             self.acceptRanges = acceptRanges
+            self.defaultIndex = defaultIndex
         }
     }
 
@@ -103,7 +116,23 @@ open class StaticFileServer: RouterMiddleware {
     /// the headers of the response.
     public init(path: String = "./public", options: Options = Options(),
                  customResponseHeadersSetter: ResponseHeadersSetter? = nil) {
-        absoluteRootPath = StaticFileServer.ResourcePathHandler.getAbsolutePath(for: path)
+        let rootPathAbsolute = StaticFileServer.ResourcePathHandler.getAbsolutePath(for: path)
+        absoluteRootPath = rootPathAbsolute
+        // If the supplied path does not exist log a warning as the path could be created dynamically at runtime.
+        // If the supplied path exists and is not a directory then log an error.
+        var isDirectory = ObjCBool(false)
+
+        let pathExists = FileManager.default.fileExists(atPath: absoluteRootPath, isDirectory: &isDirectory)
+        #if !os(Linux) || swift(>=4.1)
+        let isDirectoryBool = isDirectory.boolValue
+        #else
+        let isDirectoryBool = isDirectory
+        #endif
+        if !pathExists {
+            Log.warning("StaticFileServer being initialised with invalid path: \(rootPathAbsolute)")
+        } else if !isDirectoryBool {
+            Log.error("StaticFileServer should not be initialised with a path that resolves to a file")
+        }
 
         let cacheOptions = options.cacheOptions
         let cacheRelatedHeadersSetter =
@@ -145,6 +174,14 @@ open class StaticFileServer: RouterMiddleware {
             return
         }
 
-        fileServer.serveFile(filePath, requestPath: requestPath, response: response)
+        let queryString: String = {
+            if let queryString = request.parsedURL.query {
+                return "?\(queryString)"
+            }
+            return ""
+        }()
+        
+        fileServer.serveFile(filePath, requestPath: requestPath,
+                             queryString: queryString, response: response)
     }
 }
