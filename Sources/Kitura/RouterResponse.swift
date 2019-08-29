@@ -275,6 +275,57 @@ public class RouterResponse {
         try response.end()
     }
 
+    /// Stream file
+    ///
+    /// - Throws: Socket.Error if an error occurred while writing to a socket.
+    public func streamFile(path: String) throws {
+        guard !state.invokedEnd else {
+            Log.warning("RouterResponse end() invoked more than once for \(self.request.urlURL)")
+            return
+        }
+        lifecycle.onEndInvoked()
+        lifecycle.resetOnEndInvoked()
+
+        // Sets status code if unset
+        if statusCode == .unknown {
+            statusCode = .OK
+        }
+
+        guard FileManager.default.fileExists(atPath: path) else {
+            Log.error("File not exits at path: \(path)")
+            return
+        }
+
+//        let content = lifecycle.writtenDataFilter(buffer.data)
+//        lifecycle.resetWrittenDataFilter()
+
+        let contentLength = headers["Content-Length"]
+        if  contentLength == nil {
+            let fileAttribs = try FileManager.default.attributesOfItem(atPath: path)
+            let size = fileAttribs[.size] as! Int64
+            headers["Content-Length"] = String(size)
+        }
+
+        if cookies.count > 0 {
+            addCookies()
+        }
+
+        // Open file handle
+        let fh = FileHandle(forReadingAtPath: path)
+
+        guard fh != nil else {
+            Log.error("Cannot open file handle to stream a file at path: \(path)")
+            return
+        }
+
+        if  request.method != .head {
+            try response.streamFile(fileHandle:fh!)
+        }
+
+        state.invokedEnd = true
+        try response.end()
+    }
+
     /// Add Set-Cookie headers
     private func addCookies() {
         var cookieStrings = [String]()
