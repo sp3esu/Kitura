@@ -297,7 +297,7 @@ public class RouterResponse {
         }
 
 //        let content = lifecycle.writtenDataFilter(buffer.data)
-//        lifecycle.resetWrittenDataFilter()
+        lifecycle.resetWrittenDataFilter()
 
         let contentLength = headers["Content-Length"]
         if  contentLength == nil {
@@ -323,7 +323,6 @@ public class RouterResponse {
         }
 
         state.invokedEnd = true
-        try response.end()
     }
 
     /// Add Set-Cookie headers
