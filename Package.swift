@@ -22,9 +22,10 @@ import Foundation
 var kituraNetPackage: Package.Dependency
 
 if ProcessInfo.processInfo.environment["KITURA_NIO"] != nil {
-    kituraNetPackage = .package(url: "https://github.com/sp3esu/Kitura-NIO", .branch("streaming_files"))
+    kituraNetPackage = .package(url: "https://github.com/sp3esu/Kitura-NIO", .branch("direct_writing"))
 } else {
-    kituraNetPackage = .package(url: "https://github.com/IBM-Swift/Kitura-net.git", from: "2.3.0")
+//    kituraNetPackage = .package(url: "https://github.com/IBM-Swift/Kitura-net.git", from: "2.3.0")
+    kituraNetPackage = .package(url: "https://github.com/sp3esu/Kitura-NIO", .branch("direct_writing"))
 }
 
 let package = Package(
