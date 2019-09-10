@@ -172,7 +172,7 @@ public class RouterResponse {
             }
 
             do {
-                try end()
+//                try end()
             } catch {
                 Log.warning("Error in RouterResponse end(): \(error)")
             }
@@ -611,6 +611,35 @@ public class RouterResponse {
         state.invokedSend = true
         return self
     }
+
+    @discardableResult
+    public func startDirectWrite() throws -> RouterResponse {
+        try response.startDirectWrite()
+        return self
+    }
+
+    /// Send data.
+    ///
+    /// - Parameter data: The data to send.
+    /// - Returns: This RouterResponse.
+    @discardableResult
+    public func sendDirect(data: Data) throws -> RouterResponse {
+        guard !state.invokedEnd else {
+            Log.warning("RouterResponse send(data:) invoked after end() for \(self.request.urlURL)")
+            return self
+        }
+        try response.writeDirect(from: data)
+
+        state.invokedSend = true
+        return self
+    }
+
+    @discardableResult
+    public func endDirectWrite() throws -> RouterResponse {
+        try response.endDirectWrite()
+        return self
+    }
+
 
     /// Send a file.
     ///
