@@ -172,7 +172,7 @@ public class RouterResponse {
             }
 
             do {
-//                try end()
+                try end()
             } catch {
                 Log.warning("Error in RouterResponse end(): \(error)")
             }
@@ -278,7 +278,7 @@ public class RouterResponse {
     /// Stream file
     ///
     /// - Throws: Socket.Error if an error occurred while writing to a socket.
-    public func streamFile(path: String) throws {
+    public func streamFile(path: String, region: ClosedRange<Int>? = nil) throws {
         guard !state.invokedEnd else {
             Log.warning("RouterResponse end() invoked more than once for \(self.request.urlURL)")
             return
@@ -293,33 +293,49 @@ public class RouterResponse {
 
         guard FileManager.default.fileExists(atPath: path) else {
             Log.error("File not exits at path: \(path)")
+            // TODO: throw error
             return
         }
 
-//        let content = lifecycle.writtenDataFilter(buffer.data)
         lifecycle.resetWrittenDataFilter()
-
-        let contentLength = headers["Content-Length"]
-        if  contentLength == nil {
-            let fileAttribs = try FileManager.default.attributesOfItem(atPath: path)
-            let size = fileAttribs[.size] as! Int64
-            headers["Content-Length"] = String(size)
-        }
 
         if cookies.count > 0 {
             addCookies()
         }
 
-        // Open file handle
-        let fh = FileHandle(forReadingAtPath: path)
+        if let region = region {
+            let chunkSize = region.upperBound - region.lowerBound
 
-        guard fh != nil else {
-            Log.error("Cannot open file handle to stream a file at path: \(path)")
-            return
-        }
+            guard chunkSize > 0 else {
+                // TODO: throw error
+                return
+            }
 
-        if  request.method != .head {
-            try response.streamFile(fileHandle:fh!)
+            headers["Content-Length"] = String(chunkSize)
+
+            if  request.method != .head {
+                try response.streamFile(path: path, region: region)
+            }
+
+        } else {
+            let contentLength = headers["Content-Length"]
+            if  contentLength == nil {
+                let fileAttribs = try FileManager.default.attributesOfItem(atPath: path)
+                let size = fileAttribs[.size] as! Int64
+                headers["Content-Length"] = String(size)
+            }
+
+            // Open file handle
+            let fh = FileHandle(forReadingAtPath: path)
+
+            guard fh != nil else {
+                Log.error("Cannot open file handle to stream a file at path: \(path)")
+                return
+            }
+
+            if  request.method != .head {
+                try response.streamFile(path: path, region: nil)
+            }
         }
 
         state.invokedEnd = true
@@ -636,6 +652,7 @@ public class RouterResponse {
 
     @discardableResult
     public func endDirectWrite() throws -> RouterResponse {
+        state.invokedEnd = true
         try response.endDirectWrite()
         return self
     }
