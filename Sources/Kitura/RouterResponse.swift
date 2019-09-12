@@ -325,14 +325,6 @@ public class RouterResponse {
                 headers["Content-Length"] = String(size)
             }
 
-            // Open file handle
-            let fh = FileHandle(forReadingAtPath: path)
-
-            guard fh != nil else {
-                Log.error("Cannot open file handle to stream a file at path: \(path)")
-                return
-            }
-
             if  request.method != .head {
                 try response.streamFile(path: path, region: nil)
             }
