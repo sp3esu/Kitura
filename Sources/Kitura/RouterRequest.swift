@@ -47,7 +47,12 @@ public class RouterRequest {
 
     /// The server request.
     let serverRequest: ServerRequest
-    
+
+    /// Whenever request was cancelled
+    public var canceled: Bool {
+        return self.serverRequest.canceled
+    }
+
     /// The Data decoder generator for the request content-type
     let decoder: BodyDecoder?
 
