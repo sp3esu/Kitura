@@ -20,6 +20,11 @@ import Foundation
 import KituraTemplateEngine
 import KituraContracts
 
+public protocol FileUploadHandler {
+    func didReceivedRequestHeader(request: RouterRequest)
+    func didReceivedBodyPart(request: RouterRequest)
+}
+
 // MARK Router
 
 /// `Router` provides the external interface for routing requests to
@@ -56,6 +61,9 @@ public class Router {
     /// that will be passed to `RouterElementWalker` when server receives client request
     /// and used to handle request's url parameters.
     fileprivate var parameterHandlers = [String : [RouterParameterHandler]]()
+
+    // Upload handler - it should get posted file and store it in tmp path so then handle method could do something with it
+    public var fileUploadHandler: FileUploadHandler?
 
     // MARK: Initializer
     
@@ -551,9 +559,42 @@ extension Router : RouterMiddleware {
     }
 }
 
-
-
 extension Router : ServerDelegate {
+
+    private struct UploadsContainer {
+        static var _container:[ObjectIdentifier:RouterRequest] = [:]
+        static var _lock: NSLock = NSLock()
+    }
+
+    public func didReceivedRequestHeader(request: ServerRequest) {
+        Log.debug("didReceivedRequestHeader request: \(request)")
+
+        if let fileUploadHandler = fileUploadHandler {
+            // Create and remember upload id for this server request
+            let routerRequest = RouterRequest(request: request, decoder: nil)
+
+            UploadsContainer._lock.lock()
+            UploadsContainer._container[ObjectIdentifier(request)] = routerRequest
+            UploadsContainer._lock.unlock()
+            fileUploadHandler.didReceivedRequestHeader(request: routerRequest)
+        }
+    }
+
+    public func didReceivedBodyPart(request: ServerRequest) {
+        Log.debug("didReceivedBodyPart request: \(request)")
+
+        if let fileUploadHandler = fileUploadHandler {
+            UploadsContainer._lock.lock()
+            defer {
+                UploadsContainer._lock.unlock()
+            }
+
+            guard let routerRequest = UploadsContainer._container[ObjectIdentifier(request)] else { return }
+
+            fileUploadHandler.didReceivedBodyPart(request: routerRequest)
+        }
+    }
+
     // MARK: HTTPServerDelegate extensions
 
     /// Handle new incoming requests to the server.
@@ -567,7 +608,11 @@ extension Router : ServerDelegate {
         if let contentType = request.headers["Content-Type"]?[0], let mediaType = MediaType(contentTypeHeader: contentType) {
             decoder = decoders[mediaType]
         }
-        let routeReq = RouterRequest(request: request, decoder: decoder?())
+
+        UploadsContainer._lock.lock()
+        let routeReq = UploadsContainer._container[ObjectIdentifier(request)] ?? RouterRequest(request: request, decoder: decoder?())
+        UploadsContainer._lock.unlock()
+
         //TODO fix the stack
         var routerStack = Stack<Router>()
         routerStack.push(self)
