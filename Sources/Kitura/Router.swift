@@ -22,7 +22,7 @@ import KituraContracts
 
 public protocol FileUploadHandler {
     func didReceivedRequestHeader(request: RouterRequest)
-    func didReceivedBodyPart(request: RouterRequest)
+    func didReceivedBodyPart(request: RouterRequest, data: Data?)
 }
 
 // MARK Router
@@ -567,9 +567,9 @@ extension Router : ServerDelegate {
     }
 
     public func didReceivedRequestHeader(request: ServerRequest) {
-        Log.debug("didReceivedRequestHeader request: \(request)")
+        Log.debug("didReceivedRequestHeader request: \(ObjectIdentifier(request))")
 
-        if let fileUploadHandler = fileUploadHandler {
+        if let fileUploadHandler = self.fileUploadHandler {
             // Create and remember upload id for this server request
             let routerRequest = RouterRequest(request: request, decoder: nil)
 
@@ -580,18 +580,20 @@ extension Router : ServerDelegate {
         }
     }
 
-    public func didReceivedBodyPart(request: ServerRequest) {
-        Log.debug("didReceivedBodyPart request: \(request)")
+    public func didReceivedBodyPart(request: ServerRequest, data: Data?) {
+        Log.debug("didReceivedBodyPart request: \(ObjectIdentifier(request))")
 
-        if let fileUploadHandler = fileUploadHandler {
+        if let fileUploadHandler = self.fileUploadHandler {
             UploadsContainer._lock.lock()
             defer {
                 UploadsContainer._lock.unlock()
             }
 
-            guard let routerRequest = UploadsContainer._container[ObjectIdentifier(request)] else { return }
+            guard let routerRequest = UploadsContainer._container[ObjectIdentifier(request)] else {
+                fatalError("XXXXXX - this should not happen")
+            }
 
-            fileUploadHandler.didReceivedBodyPart(request: routerRequest)
+            fileUploadHandler.didReceivedBodyPart(request: routerRequest, data: data)
         }
     }
 
@@ -611,6 +613,7 @@ extension Router : ServerDelegate {
 
         UploadsContainer._lock.lock()
         let routeReq = UploadsContainer._container[ObjectIdentifier(request)] ?? RouterRequest(request: request, decoder: decoder?())
+//        UploadsContainer._container[ObjectIdentifier(request)] = nil  // It is not needed anymore so we can release it
         UploadsContainer._lock.unlock()
 
         //TODO fix the stack
@@ -644,6 +647,10 @@ extension Router : ServerDelegate {
                 // Not much to do here
                 Log.error("Failed to send response to the client")
             }
+
+            UploadsContainer._lock.lock()
+            UploadsContainer._container[ObjectIdentifier(request)] = nil  // It is not needed anymore so we can release it
+            UploadsContainer._lock.unlock()
         }
     }
 
