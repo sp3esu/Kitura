@@ -569,31 +569,35 @@ extension Router : ServerDelegate {
     public func didReceivedRequestHeader(request: ServerRequest) {
         Log.debug("didReceivedRequestHeader request: \(ObjectIdentifier(request))")
 
-        if let fileUploadHandler = self.fileUploadHandler {
-            // Create and remember upload id for this server request
-            let routerRequest = RouterRequest(request: request, decoder: nil)
+        if request.method.lowercased() == "post" {
+            if let fileUploadHandler = self.fileUploadHandler {
+                // Create and remember upload id for this server request
+                let routerRequest = RouterRequest(request: request, decoder: nil)
 
-            UploadsContainer._lock.lock()
-            UploadsContainer._container[ObjectIdentifier(request)] = routerRequest
-            UploadsContainer._lock.unlock()
-            fileUploadHandler.didReceivedRequestHeader(request: routerRequest)
+                UploadsContainer._lock.lock()
+                UploadsContainer._container[ObjectIdentifier(request)] = routerRequest
+                UploadsContainer._lock.unlock()
+                fileUploadHandler.didReceivedRequestHeader(request: routerRequest)
+            }
         }
     }
 
     public func didReceivedBodyPart(request: ServerRequest, data: Data?) {
         Log.debug("didReceivedBodyPart request: \(ObjectIdentifier(request))")
 
-        if let fileUploadHandler = self.fileUploadHandler {
-            UploadsContainer._lock.lock()
-            defer {
-                UploadsContainer._lock.unlock()
-            }
+        if request.method.lowercased() == "post" {
+            if let fileUploadHandler = self.fileUploadHandler {
+                UploadsContainer._lock.lock()
+                defer {
+                    UploadsContainer._lock.unlock()
+                }
 
-            guard let routerRequest = UploadsContainer._container[ObjectIdentifier(request)] else {
-                fatalError("XXXXXX - this should not happen")
-            }
+                guard let routerRequest = UploadsContainer._container[ObjectIdentifier(request)] else {
+                    fatalError("XXXXXX - this should not happen")
+                }
 
-            fileUploadHandler.didReceivedBodyPart(request: routerRequest, data: data)
+                fileUploadHandler.didReceivedBodyPart(request: routerRequest, data: data)
+            }
         }
     }
 
@@ -611,10 +615,15 @@ extension Router : ServerDelegate {
             decoder = decoders[mediaType]
         }
 
-        UploadsContainer._lock.lock()
-        let routeReq = UploadsContainer._container[ObjectIdentifier(request)] ?? RouterRequest(request: request, decoder: decoder?())
-//        UploadsContainer._container[ObjectIdentifier(request)] = nil  // It is not needed anymore so we can release it
-        UploadsContainer._lock.unlock()
+        let routeReq: RouterRequest
+
+        if request.method.lowercased() == "post" {
+            UploadsContainer._lock.lock()
+            routeReq = UploadsContainer._container[ObjectIdentifier(request)] ?? RouterRequest(request: request, decoder: decoder?())
+            UploadsContainer._lock.unlock()
+        } else {
+            routeReq = RouterRequest(request: request, decoder: decoder?())
+        }
 
         //TODO fix the stack
         var routerStack = Stack<Router>()
@@ -648,9 +657,11 @@ extension Router : ServerDelegate {
                 Log.error("Failed to send response to the client")
             }
 
-            UploadsContainer._lock.lock()
-            UploadsContainer._container[ObjectIdentifier(request)] = nil  // It is not needed anymore so we can release it
-            UploadsContainer._lock.unlock()
+            if request.method.lowercased() == "post" {
+                UploadsContainer._lock.lock()
+                UploadsContainer._container[ObjectIdentifier(request)] = nil  // It is not needed anymore so we can release it
+                UploadsContainer._lock.unlock()
+            }
         }
     }
 
