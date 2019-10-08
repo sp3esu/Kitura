@@ -311,7 +311,7 @@ public class RouterResponse {
                 return
             }
 
-//            headers["Content-Length"] = String(chunkSize)
+            // TODO: calculate content-length header
 
             if  request.method != .head {
                 try response.streamFile(path: path, region: region)
