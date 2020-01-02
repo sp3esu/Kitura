@@ -19,14 +19,6 @@
 import PackageDescription
 import Foundation
 
-var kituraNetPackage: Package.Dependency
-
-if ProcessInfo.processInfo.environment["KITURA_NIO"] != nil {
-    kituraNetPackage = .package(url: "https://github.com/IBM-Swift/Kitura-NIO.git", from: "2.3.0")
-} else {
-    kituraNetPackage = .package(url: "https://github.com/IBM-Swift/Kitura-net.git", from: "2.4.0")
-}
-
 let package = Package(
     name: "Kitura",
     products: [
@@ -38,19 +30,32 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/IBM-Swift/LoggerAPI.git", from: "1.9.0"),
         .package(url: "https://github.com/apple/swift-log.git", Version("0.0.0") ..< Version("2.0.0")),
-        kituraNetPackage,
         .package(url: "https://github.com/IBM-Swift/Kitura-TemplateEngine.git", from: "2.0.0"),
         .package(url: "https://github.com/IBM-Swift/KituraContracts.git", from: "1.0.0"),
         .package(url: "https://github.com/IBM-Swift/TypeDecoder.git", from: "1.3.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.8.0"),
+        .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.0.0"),
+        .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.0.0"),
+        .package(url: "https://github.com/IBM-Swift/BlueSSLService.git", from: "1.0.0"),
     ],
     targets: [
         .target(
             name: "Kitura",
             dependencies: ["KituraNet", "KituraTemplateEngine", "KituraContracts", "TypeDecoder", "LoggerAPI", "Logging"]
         ),
+        .target(
+            name: "CLinuxHelpers",
+            dependencies: []),
+        .target(
+            name: "KituraNet",
+            dependencies: ["NIO", "NIOFoundationCompat", "NIOHTTP1", "NIOSSL", "SSLService", "LoggerAPI", "NIOWebSocket", "CLinuxHelpers", "NIOConcurrencyHelpers", "NIOExtras"]),
+
         .testTarget(
             name: "KituraTests",
             dependencies: ["Kitura", "KituraContracts", "TypeDecoder", "LoggerAPI"]
-        )
+        ),
+        .testTarget(
+            name: "KituraNetTests",
+            dependencies: ["KituraNet"])
     ]
 )

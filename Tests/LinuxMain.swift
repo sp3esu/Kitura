@@ -43,6 +43,7 @@ extension Sequence {
 }
 
 XCTMain([
+    // Kitura
     testCase(MiscellaneousTests.allTests.shuffled()),
     testCase(TestContentType.allTests.shuffled()),
     testCase(TestCookies.allTests.shuffled()),
@@ -68,4 +69,21 @@ XCTMain([
     testCase(TestCodablePathParams.allTests.shuffled()),
     testCase(TestServerOptions.allTests.shuffled()),
 //    testCase(TestCRUDTypeRouter.allTests.shuffled()),
+    
+    // KituraNet
+    testCase(BufferListTests.allTests.shuffled()),
+    testCase(ClientRequestTests.allTests.shuffled()),
+    testCase(HTTPResponseTests.allTests.shuffled()),
+    testCase(HTTPStatusCodeTests.allTests.shuffled()),
+    testCase(LargePayloadTests.allTests.shuffled()),
+    testCase(LifecycleListenerTests.allTests.shuffled()),
+    testCase(MiscellaneousTests.allTests.shuffled()),
+    testCase(ParserTests.allTests.shuffled()),
+    testCase(ClientE2ETests.allTests.shuffled()),
+    testCase(PipeliningTests.allTests.shuffled()),
+    testCase(RegressionTests.allTests.shuffled()),
+    testCase(MonitoringTests.allTests.shuffled()),
+    testCase(KituraNetWebSocketUpgradeTest.allTests.shuffled()),
+    testCase(ChannelQuiescingTests.allTests.shuffled()),
+    
     ].shuffled())
