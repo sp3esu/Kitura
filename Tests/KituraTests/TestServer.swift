@@ -38,7 +38,7 @@ final class TestServer: KituraTest, KituraTestSuite {
     }
 
     var httpPort = 8080
-    let useNIO = ProcessInfo.processInfo.environment["KITURA_NIO"] != nil
+    let useNIO = true //ProcessInfo.processInfo.environment["KITURA_NIO"] != nil
 
     override func setUp() {
         super.setUp()
